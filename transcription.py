@@ -8,7 +8,7 @@ import numpy as np
 
 # 英字（大文字・小文字）、数字、句読点を含むリスト
 classes = list(string.ascii_letters + string.digits + string.punctuation)
-image_size = (128, 128)
+image_size = (28, 28)
 
 UPLOAD_FOLDER = "uploads"
 ALLOWED_EXTENSIONS = set(['png', 'jpg', 'jpeg', 'gif'])
@@ -40,7 +40,36 @@ def detect_text_regions(img_path):
 
 @app.route('/', methods=['GET', 'POST'])
 def upload_file():
-    # ... ここは変更なし ...
+    if request.method == 'POST':
+        # ファイルがアップロードされたかチェック
+        if 'file' not in request.files:
+            flash('No file part')
+            return redirect(request.url)
+        file = request.files['file']
+        # ユーザがファイルを選択しなかった場合
+        if file.filename == '':
+            flash('No selected file')
+            return redirect(request.url)
+        # ファイルが許可された拡張子を持っているかチェック
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(UPLOAD_FOLDER, filename)
+            file.save(file_path)
+
+            # ここでファイルをモデルに入力して予測する処理
+            gray, regions = detect_text_regions(file_path)
+            recognized_text = ""
+            for rect in regions:
+                x, y, w, h = rect
+                roi = gray[y: y+h, x: x+w]
+                roi = dynamic_resize(roi)
+                roi = enhance_text(roi)
+                roi = np.expand_dims(roi, axis=[0, -1])
+                pred = model.predict(roi)
+                class_index = np.argmax(pred)
+                recognized_text += classes[class_index]
+
+            return render_template("index.html", answer=f"{recognized_text}")
 
     return render_template("index.html", answer="")
 
